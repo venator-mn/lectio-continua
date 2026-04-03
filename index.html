@@ -449,6 +449,108 @@ footer .footer-name {
   nav { padding: 0 1rem; }
   .nav-links { gap: 1.2rem; }
 }
+
+/* ── Progress bar ───────────────────────────────────────────────────────── */
+.progress-wrap {
+  margin-bottom: 2rem;
+}
+
+.progress-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.5rem;
+}
+
+.progress-label {
+  font-family: 'Lato', sans-serif;
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.progress-count {
+  font-family: 'Playfair Display', serif;
+  font-size: 0.95rem;
+  color: var(--ink-mid);
+}
+
+.progress-count span {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.progress-track {
+  height: 5px;
+  background: var(--bg-dark);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--green-bg);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+  min-width: 0;
+}
+
+/* ── Checkbox ────────────────────────────────────────────────────────────── */
+.day-readings {
+  position: relative;
+}
+
+.day-check {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.7rem;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid var(--bg-dark);
+  border-radius: 4px;
+  background: var(--bg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+
+.day-check:hover {
+  border-color: var(--green-bg);
+}
+
+.day-check svg {
+  display: none;
+  width: 12px;
+  height: 12px;
+}
+
+/* Checked state */
+.day-card.is-checked .day-check {
+  background: var(--green-bg);
+  border-color: var(--green-bg);
+}
+
+.day-card.is-checked .day-check svg {
+  display: block;
+}
+
+.day-card.is-checked .day-num-col {
+  background: var(--green-bg);
+}
+
+.day-card.is-checked {
+  opacity: 0.65;
+}
+
+.day-card.is-checked .reading-text {
+  color: var(--ink-faint);
+}
+
 </style>
 </head>
 <body>
@@ -488,6 +590,19 @@ footer .footer-name {
       <button class="canon-btn" data-canon="catholic" onclick="setCanon('catholic')">
         73-Book Canon (with Deuterocanon)
       </button>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="progress-wrap" id="progress-wrap">
+      <div class="progress-meta">
+        <span class="progress-label">Your Progress</span>
+        <span class="progress-count" id="progress-counter">
+          <span>0</span> of 365 days complete
+        </span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+      </div>
     </div>
 
     <!-- Legend -->
@@ -548,6 +663,7 @@ function setCanon(canon) {
   currentCanon = canon;
   visibleCount = 7;
   showingAll   = false;
+  checkedDays  = loadChecked();
 
   document.querySelectorAll('.canon-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.canon === canon);
@@ -559,6 +675,7 @@ function setCanon(canon) {
 
   renderLegend();
   renderDays();
+  updateProgress();
 }
 
 function renderLegend() {
@@ -569,6 +686,50 @@ function renderLegend() {
        <span>${item.label}</span>
      </div>`
   ).join('');
+}
+
+function storageKey() {
+  return `lc_progress_${currentCanon}`;
+}
+
+function loadChecked() {
+  try {
+    const raw = localStorage.getItem(storageKey());
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch(e) { return new Set(); }
+}
+
+function saveChecked(set) {
+  try {
+    localStorage.setItem(storageKey(), JSON.stringify([...set]));
+  } catch(e) {}
+}
+
+let checkedDays = loadChecked();
+
+function toggleDay(dayNum) {
+  if (checkedDays.has(dayNum)) {
+    checkedDays.delete(dayNum);
+  } else {
+    checkedDays.add(dayNum);
+  }
+  saveChecked(checkedDays);
+  // Update just this card's visual without full re-render
+  const card = document.querySelector(`.day-card[data-day="${dayNum}"]`);
+  if (card) {
+    card.classList.toggle('is-checked', checkedDays.has(dayNum));
+  }
+  updateProgress();
+}
+
+function updateProgress() {
+  const total   = 365;
+  const done    = checkedDays.size;
+  const pct     = Math.round((done / total) * 100);
+  const fill    = document.getElementById('progress-fill');
+  const counter = document.getElementById('progress-counter');
+  if (fill)    fill.style.width = pct + '%';
+  if (counter) counter.innerHTML = `<span>${done}</span> of ${total} days complete`;
 }
 
 function buildDayCard(day) {
@@ -592,9 +753,19 @@ function buildDayCard(day) {
      </div>`
   ).join('');
 
-  return `<div class="day-card">
+  const isChecked = checkedDays.has(day.day);
+  const checkedClass = isChecked ? ' is-checked' : '';
+
+  return `<div class="day-card${checkedClass}" data-day="${day.day}">
     <div class="day-num-col"><span>Day ${day.day}</span></div>
-    <div class="day-readings">${readingRows}</div>
+    <div class="day-readings">
+      <div class="day-check" onclick="toggleDay(${day.day})" title="Mark as read">
+        <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M2 6l3 3 5-5" stroke="#c8dbc9" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      ${readingRows}
+    </div>
   </div>`;
 }
 
@@ -649,6 +820,7 @@ function collapse() {
 // Init
 renderLegend();
 renderDays();
+updateProgress();
 </script>
 </body>
 </html>
